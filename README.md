@@ -1,4 +1,5 @@
 # diflow-js – Complete Library Guide
+<p align="center"><img src="assets/diflow_logo.png" alt="diflow logo" width="140"/></p>
 
 > Dependency-injected flows & message bus helpers for **TypeScript** projects of any size
 
@@ -28,6 +29,9 @@
 
 diflow-js is built around the **Command/Query Responsibility Segregation** (CQRS) pattern and the principle of keeping all side-effects behind well-typed adapters.  
 The library ships a handful of minimal primitives—no decorators, no Reflect-metadata, <1 kB gzipped—that you can compose into rich, dependency-injected data flows that work the same way in the browser, Node, or serverless.
+
+> **Primary Goal – Source Visibility**  
+> Whenever a module mutates state through a command, diflow-js lets you see *every* possible source of that change at a glance. Each command includes a strongly-typed, human-readable `source` field injected by `CommandSource`, so mutation origins stay explicit, traceable, and easy to audit in large codebases.
 
 If you are new to CQRS or dependency-injected flows, start with the **Quick Start**; afterwards dive into the **API Reference** where every class and interface is documented with code samples.
 
@@ -73,11 +77,21 @@ deckSource.registerHandler(async (cmd) => {
   return { newDeckId: 42 };
 });
 
-const result = await deckSource.trigger({
+
+```ts
+// sync handler → immediate result
+const id = deckSource.trigger({
   type: 'CreateDeck',
   payload: { name: 'Physics' },
 });
-console.log(result.newDeckId); // → 42
+console.log(id); // → 42
+
+// async handler → Promise
+const asyncId = await deckSource.trigger({
+  type: 'CreateDeck',
+  payload: { name: 'Chemistry' },
+});
+console.log(asyncId); // → 43
 ```
 
 For *queries* you would use `QueryBus` + `LocalQueryTransport`, see the [End-to-End Example](#end-to-end-example).
@@ -95,7 +109,7 @@ For *queries* you would use `QueryBus` + `LocalQueryTransport`, see the [End-to-
 
 A *transport* moves commands or queries between producers and handlers. diflow-js ships with in-process transports:
 
-* `LocalTransport` – for commands
+* `LocalTransport` – for commands (sync **and** async)
 * `LocalQueryTransport` – for queries
 
 You can implement your own transports (e.g. NATS, RabbitMQ, HTTP) by adhering to `ITransport` / `IQueryTransport`.
@@ -117,8 +131,8 @@ new CommandSource<TCommand, TResponse>(name, transport)
 
 #### Methods
 
-* `registerHandler(handler)` – subscribe a single async function that will process every incoming command.
-* `trigger(command)` – send a command (minus the `source` field, which is filled in for you) and resolve with the handler’s response.
+* `registerHandler(handler)` – subscribe a single *sync or async* function that will process every incoming command.
+* `trigger(command)` – send a command (minus the `source` field, which is filled in for you) and **either** return the handler’s response immediately or return a Promise depending on whether the handler is synchronous or asynchronous.
 
 ---
 
@@ -134,9 +148,11 @@ Analogous to `CommandSource` but for read-only queries.
 ### Interface: `ITransport`
 
 ```ts
+type TCommandReturn<T> = T | Promise<T>;
+
 interface ITransport<TCommand, TResponse> {
-  send(cmd: TCommand): Promise<TResponse>;
-  on(handler: (cmd: TCommand) => Promise<TResponse>): void;
+  send(cmd: TCommand): TCommandReturn<TResponse>;
+  on(handler: (cmd: TCommand) => TCommandReturn<TResponse>): void;
 }
 ```
 

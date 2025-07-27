@@ -1,16 +1,16 @@
-
 import { IQueryTransport } from './IQueryTransport';
+import { TCommandReturn } from './TCommandReturn';
 
 export class QueryBus<TQuery, TResponse> {
-  constructor(
-    private readonly transport: IQueryTransport<TQuery, TResponse>
-  ) {}
+	constructor(
+		private readonly transport: IQueryTransport<TQuery, TResponse>,
+	) {}
 
-  registerHandler(handler: (query: TQuery) => Promise<TResponse>) {
-    this.transport.on(handler);
-  }
+	registerHandler(handler: (query: TQuery) => TCommandReturn<TResponse>) {
+		this.transport.on(handler);
+	}
 
-  trigger(query: TQuery): Promise<TResponse> {
-    return this.transport.send(query);
-  }
+	trigger(query: TQuery): TCommandReturn<TResponse> {
+		return this.transport.send(query);
+	}
 }

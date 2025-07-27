@@ -16,11 +16,10 @@ source.registerHandler(async (cmd) => {
 	return { newDeckId: 777 };
 });
 
-source
-	.trigger({
+(async () => {
+	const result = await source.trigger({
 		type: ECommandType.CreateDeck,
 		payload: { name: 'Physics' },
-	})
-	.then((result) => {
-		console.log('Local created deck ID:', result.newDeckId);
 	});
+	console.log('Local created deck ID:', result.newDeckId);
+})();

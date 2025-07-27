@@ -6,7 +6,7 @@ interface MyQuery {
 }
 
 describe('LocalQueryTransport', () => {
-	it('delivers query to handler and returns response', async () => {
+	it('delivers query to registered async handler and returns response', async () => {
 		const transport = new LocalQueryTransport<MyQuery, number>();
 		transport.on(async (query) => query.term.length);
 		const result = await transport.send({ term: 'hello' });
@@ -15,8 +15,18 @@ describe('LocalQueryTransport', () => {
 
 	it('throws error when no handler registered', async () => {
 		const transport = new LocalQueryTransport<MyQuery, number>();
-		await expect(transport.send({ term: 'oops' })).rejects.toThrow(
-			'No handler registered',
-		);
+		expect(() => {
+			transport.send({ term: 'oops' });
+		}).toThrow('No handler registered');
 	});
+});
+
+it('works with synchronous handler', () => {
+	const transport = new LocalQueryTransport<MyQuery, string>();
+
+	transport.on((query) => `Hello, ${query.term}!`);
+
+	const response = transport.send({ term: 'Alice' });
+
+	expect(response).toBe('Hello, Alice!');
 });
