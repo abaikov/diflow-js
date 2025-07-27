@@ -1,0 +1,26 @@
+{
+    "compilerOptions": {
+        "target": "ES2018",
+        "module": "ESNext",
+        "lib": [
+            "ES2015",
+            "ES2018",
+            "DOM"
+        ],
+        "declaration": true,
+        "outDir": "dist",
+        "strict": true,
+        "skipLibCheck": true,
+        "moduleResolution": "Node",
+        "esModuleInterop": true
+    },
+    "include": [
+        "src",
+        "tests",
+        "example"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist"
+    ]
+}

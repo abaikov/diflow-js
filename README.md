@@ -1,93 +1,220 @@
-# diflow-js
-Dependency-injected flows for browser &amp; Node
+# diflow-js – Complete Library Guide
 
-diflow-js is a tiny (< 1 kB gzipped) TypeScript library that lets you write generator-based “flows” once and plug them into any runtime—React, Vue, NestJS, Lambda, a test runner—while keeping every side-effect and model behind explicit adapters that you register through dependency-injection.
+> Dependency-injected flows & message bus helpers for **TypeScript** projects of any size
 
-```javascript
-import { createFlowContext, defineFlow, defineAdapter } from 'diflow-js';
-```
-## Why you might like it	/ What it gives you
+---
 
-Same domain code on client & server	Write one generator, reuse it in SSR or an HTTP controller.
+## 📚 Table of Contents
 
-All mutations are visible in reviews	Adapters subscribe with ctx.on(trigger, …) — grep the trigger, see every effect.
+1. [Introduction](#introduction)
+2. [Quick Start](#quick-start)
+3. [Core Concepts](#core-concepts)
+   * [Command vs Query](#command-vs-query)
+   * [Transports](#transports)
+4. [API Reference](#api-reference)
+   * [`CommandSource`](#class-commandsource)
+   * [`QueryBus`](#class-querybus)
+   * [`ITransport`](#interface-itransport)
+   * [`IQueryTransport`](#interface-iquerytransport)
+   * [`LocalTransport`](#class-localtransport)
+   * [`LocalQueryTransport`](#class-localquerytransport)
+5. [End-to-End Example](#end-to-end-example)
+6. [Extending diflow-js](#extending-diflow-js)
+7. [FAQ](#faq)
 
-No framework lock-in	Works with Redux, Zustand, TypeORM, Prisma, RxJS … or none.
+---
 
-Type-safety first	reply(payload) auto-picks the correct response creator; wrong shapes don’t compile.
+## Introduction
 
-Zero runtime deps	No RxJS, no Reflect-Metadata — just Maps and Symbols.
+diflow-js is built around the **Command/Query Responsibility Segregation** (CQRS) pattern and the principle of keeping all side-effects behind well-typed adapters.  
+The library ships a handful of minimal primitives—no decorators, no Reflect-metadata, <1 kB gzipped—that you can compose into rich, dependency-injected data flows that work the same way in the browser, Node, or serverless.
 
-## ✨ Quick taste
-```ts
-// 1. declare triggers & steps
-const Triggers = {
-  AddButton: evt<{ title: string }>(),
-  AddEnter : evt<{ title: string }>(),
-};
-const [CreateDeck, DeckCreated] = pair<{ title: string }, { id: string }>();
+If you are new to CQRS or dependency-injected flows, start with the **Quick Start**; afterwards dive into the **API Reference** where every class and interface is documented with code samples.
 
-// 2. business story
-function* addDeckFlow(p, step) {
-  yield step(CreateDeck, { title: p.title });
-}
+---
 
-// 3. wrap as flow
-const flow = defineFlow({ name: 'AddDeck', triggers: Triggers, steps: { CreateDeck }, generator: addDeckFlow });
+## Quick Start
 
-// 4. adapter mutating Postgres
-const deckPgAdapter = defineAdapter({
-  name: 'Deck@PG',
-  setup(ctx) {
-    ctx.on(Triggers.AddButton, ({ bus, steps }) => {
-      bus.on(steps.CreateDeck, async (reply, { payload }) => {
-        const id = await saveToDB(payload.title);
-        reply({ id });
-      });
-    });
-  },
-});
+Install:
 
-// 5. bootstrap
-const ctx = createFlowContext({ /* DI models here */ });
-ctx.registerFlow(flow);
-ctx.registerAdapter(deckPgAdapter);
-
-// 6. use in React *or* Nest
-ctx.emit(flow.triggers.AddButton({ title: 'Physics' }));
-```
-
-## 🚀 Core ideas
-
-Flows are generator functions (yield step(CreateDeck, payload)).
-
-Triggers are plain creators that start a new instance of a flow.
-
-Adapters subscribe to one or more triggers, receive a typed bus, and call reply(payload)—never hand-crafting action objects.
-
-FlowContext is the only stateful object; you can create multiple contexts (per request, per tab) or keep one singleton.
-
-### 📦 Install
 ```bash
 npm i diflow-js
 ```
-ESM + CommonJS bundles and *.d.ts shipped.
 
-## 🗺 Similar tools & where diflow-js sits
+Create a *command* type and a matching *response* type:
 
-Redux-Saga / Effector:	No Redux store required, zero external runtime deps, DI-friendly.
+```ts
+// types.ts
+export type CreateDeckPayload = { name: string };
+export type CreateDeckResponse = { newDeckId: number };
 
-XState:	No formal FSM needed; generator syntax is lighter for linear stories.
+export type CreateDeckCommand = {
+  type: 'CreateDeck';
+  source: string;   // filled automatically by CommandSource
+  payload: CreateDeckPayload;
+};
+```
 
-NestJS CQRS:	Works the same in the browser and doesn’t rely on decorators/reflect-metadata.
+Wire a command source with a transport and register a handler:
 
-### When to reach for diflow-js
+```ts
+import { CommandSource } from 'diflow-js';
+import { LocalTransport } from 'diflow-js';
+import { CreateDeckCommand, CreateDeckResponse } from './types';
 
-- You have multi-step stories that must run in both front-end and back-end.
+const deckSource = new CommandSource<CreateDeckCommand, CreateDeckResponse>(
+  'DeckModal',              // human-readable source name
+  new LocalTransport(),     // process-local transport implementation
+);
 
-- You want every side-effect to be searchable and reviewable, not hidden behind magic scanning.
+deckSource.registerHandler(async (cmd) => {
+  console.log(`Saving deck '${cmd.payload.name}'…`);
+  /* …persist to DB… */
+  return { newDeckId: 42 };
+});
 
-- Your team lives in TypeScript and values compile-time guarantees over runtime checks.
+const result = await deckSource.trigger({
+  type: 'CreateDeck',
+  payload: { name: 'Physics' },
+});
+console.log(result.newDeckId); // → 42
+```
 
-### When a simple CRUD service is enough, stick to it.
-### When the story spans UI, cache, DB, and queue—and you want one mental model everywhere—give diflow-js a spin.
+For *queries* you would use `QueryBus` + `LocalQueryTransport`, see the [End-to-End Example](#end-to-end-example).
+
+---
+
+## Core Concepts
+
+### Command vs Query
+
+* **Command** – expresses an intention to *change* the system. Commands are sent via `CommandSource` and handled exactly once.
+* **Query** – asks the system for *information* without mutating it. Queries are sent via `QueryBus` and answered with a response.
+
+### Transports
+
+A *transport* moves commands or queries between producers and handlers. diflow-js ships with in-process transports:
+
+* `LocalTransport` – for commands
+* `LocalQueryTransport` – for queries
+
+You can implement your own transports (e.g. NATS, RabbitMQ, HTTP) by adhering to `ITransport` / `IQueryTransport`.
+
+---
+
+## API Reference
+
+### Class: `CommandSource`
+
+```ts
+new CommandSource<TCommand, TResponse>(name, transport)
+```
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Human-readable identifier automatically injected into every command (`source` field). |
+| `transport` | `ITransport<TCommand, TResponse>` | Transport implementation used to deliver commands. |
+
+#### Methods
+
+* `registerHandler(handler)` – subscribe a single async function that will process every incoming command.
+* `trigger(command)` – send a command (minus the `source` field, which is filled in for you) and resolve with the handler’s response.
+
+---
+
+### Class: `QueryBus`
+
+Analogous to `CommandSource` but for read-only queries.
+
+* `registerHandler(handler)` – subscribe a single query handler.
+* `trigger(query)` – send a query and await its response.
+
+---
+
+### Interface: `ITransport`
+
+```ts
+interface ITransport<TCommand, TResponse> {
+  send(cmd: TCommand): Promise<TResponse>;
+  on(handler: (cmd: TCommand) => Promise<TResponse>): void;
+}
+```
+
+Implement this interface to add new command transports.
+
+---
+
+### Interface: `IQueryTransport`
+
+Same contract as `ITransport` but for *queries*.
+
+---
+
+### Class: `LocalTransport`
+
+A zero-dependency, in-memory implementation of `ITransport` suited for tests, serverless functions, and monoliths.
+
+---
+
+### Class: `LocalQueryTransport`
+
+In-memory query counterpart of `LocalTransport`.
+
+---
+
+## End-to-End Example
+
+The repository ships two runnable examples:
+
+```bash
+node example/Example.ts            # command example
+node example/GetDecksQuery.ts      # query example (to be implemented)
+```
+
+Below is a condensed version of the command example:
+
+```ts
+import { CommandSource, LocalTransport } from 'diflow-js';
+import { TCreateDeckCommand, TCreateDeckResponse } from './CreateDeckCommand';
+
+const source = new CommandSource<TCreateDeckCommand, TCreateDeckResponse>(
+  'Modal',
+  new LocalTransport(),
+);
+
+source.registerHandler(async (cmd) => {
+  console.log(`[LOCAL HANDLER] ${cmd.payload.name}`);
+  return { newDeckId: 777 };
+});
+
+const res = await source.trigger({
+  type: 'CreateDeck',
+  payload: { name: 'Physics' },
+});
+console.log(res.newDeckId);
+```
+
+---
+
+## Extending diflow-js
+
+* **New transports** – implement `ITransport`/`IQueryTransport` to plug in NATS, RabbitMQ, or WebSockets.
+* **Middlewares** – wrap your transport’s `send` / `on` methods to add logging, retries, or metrics.
+* **Type utilities** – use `Omit<TCommand, 'source'>` (as seen in `CommandSource.trigger`) to prevent callers from polluting the `source` field.
+
+---
+
+## FAQ
+
+**Q: Can I register multiple handlers per command type?**  
+Not at the moment—`registerHandler` stores exactly one handler. If you need fan-out, create a custom transport or emit *events* instead of *commands*.
+
+**Q: Where are the flows and adapters mentioned in the top-level README?**  
+diflow-js’ long-term roadmap includes higher-level helpers (`defineFlow`, `defineAdapter`). The current NPM package provides the low-level message-bus primitives described above.
+
+**Q: Does it work in the browser?**  
+Yes! All shipped code is ECMAScript-compliant and free of Node-specific APIs.
+
+---
+
+Happy coding – and may your flows be evergreen! ✨

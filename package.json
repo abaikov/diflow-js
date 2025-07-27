@@ -1,0 +1,52 @@
+{
+  "name": "diflow-js",
+  "version": "1.0.0",
+  "description": "Dependency-injected flows for browser & Node",
+  "keywords": [
+    "cqrs",
+    "command bus",
+    "query bus",
+    "dependency injection",
+    "transport",
+    "typescript",
+    "node",
+    "browser"
+  ],
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abaikov/diflow-js.git"
+  },
+  "bugs": {
+    "url": "https://github.com/abaikov/diflow-js/issues"
+  },
+  "homepage": "https://github.com/abaikov/diflow-js#readme",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --dts --format esm,cjs",
+    "prepublishOnly": "npm run build",
+    "test": "jest"
+  },
+  "files": [
+    "dist"
+  ],
+  "author": "Andrei Baikov <abaikov23@gmail.com>",
+  "license": "MIT",
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
+    "@types/jest": "^29.5.12",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3"
+  }
+}
