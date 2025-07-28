@@ -1,5 +1,5 @@
 # diflow-js – Complete Library Guide
-<p align="center"><img src="assets/diflow_logo.png" alt="diflow logo" width="140"/></p>
+<p align="center"><img src="assets/diflow_logo.png" alt="diflow logo"/></p>
 
 > Dependency-injected flows & message bus helpers for **TypeScript** projects of any size
 
